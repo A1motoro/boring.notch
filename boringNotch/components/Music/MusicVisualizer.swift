@@ -9,8 +9,11 @@ import Cocoa
 import SwiftUI
 
 class AudioSpectrum: NSView {
+    private let barWidth: CGFloat = 2
+    private let barCount = 4
+    private let barSpacing: CGFloat = 2
+    private let totalHeight: CGFloat = 14
     private var barLayers: [CAShapeLayer] = []
-    private var barScales: [CGFloat] = []
     private var isPlaying: Bool = true
     private var animationTimer: Timer?
     
@@ -27,31 +30,33 @@ class AudioSpectrum: NSView {
     }
 
     private func setupBars() {
-        let barWidth: CGFloat = 2
-        let barCount = 4
-        let spacing: CGFloat = barWidth
-        let totalWidth = CGFloat(barCount) * (barWidth + spacing)
-        let totalHeight: CGFloat = 14
+        let totalWidth = CGFloat(barCount) * (barWidth + barSpacing)
         frame.size = CGSize(width: totalWidth, height: totalHeight)
 
         for i in 0 ..< barCount {
-            let xPosition = CGFloat(i) * (barWidth + spacing)
+            let xPosition = CGFloat(i) * (barWidth + barSpacing)
             let barLayer = CAShapeLayer()
             barLayer.frame = CGRect(x: xPosition, y: 0, width: barWidth, height: totalHeight)
-            barLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-            barLayer.position = CGPoint(x: xPosition + barWidth / 2, y: totalHeight / 2)
             barLayer.fillColor = NSColor.white.cgColor
-            barLayer.backgroundColor = NSColor.white.cgColor
-            barLayer.allowsGroupOpacity = false
-            barLayer.masksToBounds = true
-            let path = NSBezierPath(roundedRect: CGRect(x: 0, y: 0, width: barWidth, height: totalHeight),
-                                    xRadius: barWidth / 2,
-                                    yRadius: barWidth / 2)
-            barLayer.path = path.cgPath
+            barLayer.path = makeBarPath(scale: 0.35)
             barLayers.append(barLayer)
-            barScales.append(0.35)
             layer?.addSublayer(barLayer)
         }
+    }
+
+    private func makeBarPath(scale: CGFloat) -> CGPath {
+        let height = totalHeight * scale
+        let rect = CGRect(
+            x: 0,
+            y: (totalHeight - height) / 2,
+            width: barWidth,
+            height: height
+        )
+        return NSBezierPath(
+            roundedRect: rect,
+            xRadius: barWidth / 2,
+            yRadius: barWidth / 2
+        ).cgPath
     }
     
     private func startAnimating() {
@@ -68,29 +73,28 @@ class AudioSpectrum: NSView {
     }
     
     private func updateBars() {
-        for (i, barLayer) in barLayers.enumerated() {
-            let currentScale = barScales[i]
+        for barLayer in barLayers {
             let targetScale = CGFloat.random(in: 0.35 ... 1.0)
-            barScales[i] = targetScale
-            let animation = CABasicAnimation(keyPath: "transform.scale.y")
-            animation.fromValue = currentScale
-            animation.toValue = targetScale
+            let targetPath = makeBarPath(scale: targetScale)
+            let animation = CABasicAnimation(keyPath: "path")
+            animation.fromValue = barLayer.presentation()?.path ?? barLayer.path
+            animation.toValue = targetPath
             animation.duration = 0.3
-            animation.autoreverses = true
-            animation.fillMode = .forwards
-            animation.isRemovedOnCompletion = false
             if #available(macOS 13.0, *) {
                 animation.preferredFrameRateRange = CAFrameRateRange(minimum: 24, maximum: 24, preferred: 24)
             }
-            barLayer.add(animation, forKey: "scaleY")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            barLayer.path = targetPath
+            CATransaction.commit()
+            barLayer.add(animation, forKey: "path")
         }
     }
     
     private func resetBars() {
-        for (i, barLayer) in barLayers.enumerated() {
+        for barLayer in barLayers {
             barLayer.removeAllAnimations()
-            barLayer.transform = CATransform3DMakeScale(1, 0.35, 1)
-            barScales[i] = 0.35
+            barLayer.path = makeBarPath(scale: 0.35)
         }
     }
     
